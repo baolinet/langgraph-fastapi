@@ -1,0 +1,180 @@
+from typing import Literal
+
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
+
+from agents import build_agent_runner
+from agents.core.runner import AgentRunRequest
+from routers.dependencies import verify_api_auth_key
+from utils.response import error_response, success_response
+
+router = APIRouter(prefix="/api/agents", tags=["agents"])
+
+_agent_runner = build_agent_runner()
+
+
+class CustomerServiceAgentRequest(BaseModel):
+    user_input: str = Field(..., min_length=1, description="用户输入")
+    conversation_id: str = Field(..., min_length=1, description="会话 ID")
+    user_context: dict = Field(default_factory=dict, description="用户上下文")
+    messages: list[dict[str, str]] = Field(default_factory=list, description="历史消息")
+    metadata: dict = Field(default_factory=dict, description="附加元数据")
+
+
+class ContractAuditorAgentRequest(BaseModel):
+    conversation_id: str = Field(..., min_length=1, description="会话 ID")
+    action: Literal["initial_review", "supplement_info", "confirm_review"] = Field(
+        default="initial_review",
+        description="合同审核动作",
+    )
+    contract_text: str | None = Field(default=None, description="合同正文")
+    review_focus: list[str] = Field(default_factory=list, description="审核关注点")
+    supplemental_info: str | None = Field(default=None, description="客户补充信息")
+    confirmation_status: Literal["pending", "confirmed", "rejected", "not_required"] = Field(
+        default="not_required",
+        description="客户确认状态",
+    )
+    user_input: str | None = Field(default=None, description="额外审核指令")
+    user_context: dict = Field(default_factory=dict, description="用户上下文")
+    messages: list[dict[str, str]] = Field(default_factory=list, description="历史消息")
+    metadata: dict = Field(default_factory=dict, description="附加元数据")
+
+
+@router.post(
+    "/customer-service/run",
+    summary="调用 Customer Service Agent",
+    dependencies=[Depends(verify_api_auth_key)],
+)
+async def run_customer_service_agent(request: CustomerServiceAgentRequest):
+    """调用 customer_service 智能体生成基础客服回复。"""
+    try:
+        agent_request = AgentRunRequest(
+            agent_type="customer_service",
+            user_input=request.user_input,
+            conversation_id=request.conversation_id,
+            user_context=request.user_context,
+            messages=request.messages,
+            metadata=request.metadata,
+        )
+        result = _agent_runner.run(agent_request)
+        return success_response(data=result.model_dump(), message="Customer Service Agent 调用成功")
+    except ValueError as exc:
+        return error_response(message=str(exc), code=400)
+    except RuntimeError as exc:
+        return error_response(message=str(exc), code=500)
+    except Exception as exc:
+        return error_response(message=f"Agent 调用失败: {exc}", code=500)
+
+
+@router.post(
+    "/contract-auditor/run",
+    summary="调用 Contract Auditor Agent",
+    dependencies=[Depends(verify_api_auth_key)],
+)
+async def run_contract_auditor_agent(request: ContractAuditorAgentRequest):
+    """调用 contract_auditor 智能体，支持补充信息和客户确认流程。"""
+    try:
+        precheck = _precheck_contract_auditor_request(request)
+        if precheck is not None:
+            return success_response(data=precheck, message="Contract Auditor Agent 等待用户输入")
+
+        agent_request = AgentRunRequest(
+            agent_type="contract_auditor",
+            user_input=_build_contract_auditor_prompt(request),
+            conversation_id=request.conversation_id,
+            user_context=_build_contract_auditor_context(request),
+            messages=request.messages,
+            metadata=request.metadata,
+        )
+        result = _agent_runner.run(agent_request)
+        response_data = {
+            "workflow_status": _resolve_contract_workflow_status(request),
+            "awaiting": None,
+            "agent_result": result.model_dump(),
+        }
+        return success_response(data=response_data, message="Contract Auditor Agent 调用成功")
+    except ValueError as exc:
+        return error_response(message=str(exc), code=400)
+    except RuntimeError as exc:
+        return error_response(message=str(exc), code=500)
+    except Exception as exc:
+        return error_response(message=f"Agent 调用失败: {exc}", code=500)
+
+
+def _precheck_contract_auditor_request(request: ContractAuditorAgentRequest) -> dict | None:
+    if request.action == "initial_review" and not request.contract_text:
+        return {
+            "workflow_status": "waiting_for_information",
+            "awaiting": {
+                "type": "contract_text",
+                "message": "请先提供合同正文后再发起审核。",
+                "required_fields": ["contract_text"],
+            },
+            "agent_result": None,
+        }
+
+    if request.action == "supplement_info" and not request.supplemental_info:
+        return {
+            "workflow_status": "waiting_for_information",
+            "awaiting": {
+                "type": "supplemental_info",
+                "message": "当前动作是补充材料，请提供补充说明或缺失条款信息。",
+                "required_fields": ["supplemental_info"],
+            },
+            "agent_result": None,
+        }
+
+    if request.action == "confirm_review" and request.confirmation_status == "pending":
+        return {
+            "workflow_status": "waiting_for_confirmation",
+            "awaiting": {
+                "type": "customer_confirmation",
+                "message": "请等待客户确认审核意见后再继续。",
+                "required_fields": ["confirmation_status"],
+            },
+            "agent_result": None,
+        }
+
+    return None
+
+
+def _build_contract_auditor_prompt(request: ContractAuditorAgentRequest) -> str:
+    parts = [
+        f"审核动作: {request.action}",
+    ]
+    if request.contract_text:
+        parts.append(f"合同正文:\n{request.contract_text}")
+    if request.review_focus:
+        parts.append(f"审核关注点: {', '.join(request.review_focus)}")
+    if request.supplemental_info:
+        parts.append(f"客户补充信息:\n{request.supplemental_info}")
+    if request.confirmation_status != "not_required":
+        parts.append(f"客户确认状态: {request.confirmation_status}")
+    if request.user_input:
+        parts.append(f"额外指令: {request.user_input}")
+    parts.append(
+        "请输出合同风险摘要、关键条款、缺失项、需要客户确认的问题，以及下一步建议。"
+    )
+    return "\n\n".join(parts)
+
+
+def _build_contract_auditor_context(request: ContractAuditorAgentRequest) -> dict:
+    context = dict(request.user_context)
+    context.update(
+        {
+            "workflow_action": request.action,
+            "confirmation_status": request.confirmation_status,
+            "review_focus": request.review_focus,
+            "has_contract_text": bool(request.contract_text),
+            "has_supplemental_info": bool(request.supplemental_info),
+        }
+    )
+    return context
+
+
+def _resolve_contract_workflow_status(request: ContractAuditorAgentRequest) -> str:
+    if request.action == "confirm_review":
+        return "confirmed" if request.confirmation_status == "confirmed" else "review_completed"
+    if request.action == "supplement_info":
+        return "supplement_received"
+    return "review_completed"

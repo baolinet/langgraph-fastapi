@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from config import get_settings
-from routers import users, auth
+from routers import agents, auth, users
 from database import engine
-from models.user import Base
+from models import Base
 from utils.exceptions import register_exception_handlers
 from utils.response import success_response
 
@@ -34,6 +34,7 @@ Base.metadata.create_all(bind=engine)
 # 注册路由
 app.include_router(auth.router)  # 认证路由
 app.include_router(users.router)  # 用户路由
+app.include_router(agents.router)  # Agent 路由
 
 @app.get("/", tags=["系统"])
 async def root():
