@@ -6,6 +6,7 @@ from typing import Any
 from agents.core.llm import create_chat_model, get_llm_config
 from agents.core.state import AgentState
 from agents.profiles.base import AgentProfile
+from services.customer_support_service import CustomerSupportService
 
 
 def load_profile_node(payload: dict[str, Any]) -> dict[str, Any]:
@@ -20,6 +21,40 @@ def preprocess_input_node(payload: dict[str, Any]) -> dict[str, Any]:
     state: AgentState = deepcopy(payload["state"])
     state["user_input"] = " ".join(state["user_input"].split())
     state["messages"] = state.get("messages", [])[-10:]
+    return {**payload, "state": state}
+
+
+def load_customer_profile_node(payload: dict[str, Any]) -> dict[str, Any]:
+    state: AgentState = deepcopy(payload["state"])
+    profile: AgentProfile = payload["profile"]
+    if not profile.should_load_customer_profile():
+        return {**payload, "state": state}
+    service = CustomerSupportService()
+    state["context"]["customer_profile"] = service.get_customer_profile(state.get("user_context", {}))
+    return {**payload, "state": state}
+
+
+def load_order_context_node(payload: dict[str, Any]) -> dict[str, Any]:
+    state: AgentState = deepcopy(payload["state"])
+    profile: AgentProfile = payload["profile"]
+    if not profile.should_load_order_context():
+        return {**payload, "state": state}
+    service = CustomerSupportService()
+    state["context"]["order_context"] = service.get_order_context(
+        state["user_input"], state.get("user_context", {})
+    )
+    return {**payload, "state": state}
+
+
+def retrieve_faq_node(payload: dict[str, Any]) -> dict[str, Any]:
+    state: AgentState = deepcopy(payload["state"])
+    profile: AgentProfile = payload["profile"]
+    if not profile.should_retrieve_faq():
+        return {**payload, "state": state}
+    service = CustomerSupportService()
+    faq_hits = service.retrieve_faq(state["user_input"])
+    state["context"]["faq_hits"] = faq_hits
+    state["citations"] = [item["question"] for item in faq_hits]
     return {**payload, "state": state}
 
 
@@ -120,6 +155,18 @@ def _render_task_prompt(profile: AgentProfile, state: AgentState) -> str:
     capabilities = ", ".join(profile.capabilities)
     constraints = "\n".join(f"- {item}" for item in profile.constraints)
     output_fields = "\n".join(f"- {item}" for item in profile.output_sections)
+    customer_profile = state.get("context", {}).get("customer_profile")
+    order_context = state.get("context", {}).get("order_context")
+    faq_hits = state.get("context", {}).get("faq_hits", [])
+    context_sections = []
+    if customer_profile:
+        context_sections.append(f"客户画像：{customer_profile}")
+    if order_context:
+        context_sections.append(f"订单上下文：{order_context}")
+    if faq_hits:
+        context_sections.append(f"FAQ 命中：{faq_hits}")
+    extra_context = "\n".join(context_sections)
+    context_block = f"{extra_context}\n" if extra_context else ""
     return (
         f"你是 {profile.display_name}。\n"
         f"岗位目标：{profile.description}\n"
@@ -128,5 +175,6 @@ def _render_task_prompt(profile: AgentProfile, state: AgentState) -> str:
         f"执行约束：\n{constraints}\n\n"
         f"用户输入：{state['user_input']}\n"
         f"会话上下文：{state.get('user_context', {})}\n"
+        f"{context_block}"
         "请基于岗位职责输出结构化、可执行的回答。"
     )

@@ -19,6 +19,9 @@ class AgentProfile:
     model_config: dict[str, Any] = field(default_factory=dict)
     enable_intent_classification: bool = True
     enable_tool_routing: bool | None = None
+    enable_customer_profile: bool = False
+    enable_order_context: bool = False
+    enable_faq_retrieval: bool = False
     enable_specialist: bool | None = None
     enable_safety_check: bool | None = None
 
@@ -32,6 +35,15 @@ class AgentProfile:
         if self.enable_tool_routing is not None:
             return self.enable_tool_routing
         return bool(self.default_tools)
+
+    def should_load_customer_profile(self) -> bool:
+        return self.enable_customer_profile
+
+    def should_load_order_context(self) -> bool:
+        return self.enable_order_context
+
+    def should_retrieve_faq(self) -> bool:
+        return self.enable_faq_retrieval
 
     def should_use_specialist(self) -> bool:
         if self.enable_specialist is not None:

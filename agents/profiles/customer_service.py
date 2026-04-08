@@ -11,6 +11,9 @@ PROFILE = AgentProfile(
     default_tools=("customer_policy_lookup",),
     default_next_actions=["send response", "track resolution"],
     llm_profile="fast_support",
+    enable_customer_profile=True,
+    enable_order_context=True,
+    enable_faq_retrieval=True,
     enable_specialist=False,
     enable_safety_check=False,
 )

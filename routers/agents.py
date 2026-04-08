@@ -2,10 +2,14 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from agents import build_agent_runner
 from agents.core.runner import AgentRunRequest
+from database import get_db
 from routers.dependencies import verify_api_auth_key
+from schemas.memory import AgentConversationCreate, AgentMessageCreate
+from services.memory_service import AgentMemoryService
 from utils.response import error_response, success_response
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -45,9 +49,31 @@ class ContractAuditorAgentRequest(BaseModel):
     summary="调用 Customer Service Agent",
     dependencies=[Depends(verify_api_auth_key)],
 )
-async def run_customer_service_agent(request: CustomerServiceAgentRequest):
+async def run_customer_service_agent(
+    request: CustomerServiceAgentRequest,
+    db: Session = Depends(get_db),
+):
     """调用 customer_service 智能体生成基础客服回复。"""
     try:
+        memory_service = AgentMemoryService(db)
+        _upsert_conversation(
+            memory_service,
+            conversation_id=request.conversation_id,
+            agent_type="customer_service",
+            status="active",
+            waiting_for=None,
+            summary=request.user_input[:200],
+        )
+        _append_user_message(
+            memory_service,
+            conversation_id=request.conversation_id,
+            content=request.user_input,
+            metadata={
+                "agent_type": "customer_service",
+                "user_context": request.user_context,
+                "metadata": request.metadata,
+            },
+        )
         agent_request = AgentRunRequest(
             agent_type="customer_service",
             user_input=request.user_input,
@@ -57,6 +83,16 @@ async def run_customer_service_agent(request: CustomerServiceAgentRequest):
             metadata=request.metadata,
         )
         result = _agent_runner.run(agent_request)
+        _append_assistant_message(
+            memory_service,
+            conversation_id=request.conversation_id,
+            content=result.answer,
+            metadata={
+                "agent_type": "customer_service",
+                "summary": result.summary,
+                "risk_level": result.risk_level,
+            },
+        )
         return success_response(data=result.model_dump(), message="Customer Service Agent 调用成功")
     except ValueError as exc:
         return error_response(message=str(exc), code=400)
@@ -71,16 +107,61 @@ async def run_customer_service_agent(request: CustomerServiceAgentRequest):
     summary="调用 Contract Auditor Agent",
     dependencies=[Depends(verify_api_auth_key)],
 )
-async def run_contract_auditor_agent(request: ContractAuditorAgentRequest):
+async def run_contract_auditor_agent(
+    request: ContractAuditorAgentRequest,
+    db: Session = Depends(get_db),
+):
     """调用 contract_auditor 智能体，支持补充信息和客户确认流程。"""
     try:
+        memory_service = AgentMemoryService(db)
+        prompt = _build_contract_auditor_prompt(request)
+        _upsert_conversation(
+            memory_service,
+            conversation_id=request.conversation_id,
+            agent_type="contract_auditor",
+            status="active",
+            waiting_for=None,
+            summary=(request.user_input or request.action)[:200],
+        )
+        _append_user_message(
+            memory_service,
+            conversation_id=request.conversation_id,
+            content=prompt,
+            metadata={
+                "agent_type": "contract_auditor",
+                "action": request.action,
+                "review_focus": request.review_focus,
+                "confirmation_status": request.confirmation_status,
+                "user_context": request.user_context,
+                "metadata": request.metadata,
+            },
+        )
         precheck = _precheck_contract_auditor_request(request)
         if precheck is not None:
+            _upsert_conversation(
+                memory_service,
+                conversation_id=request.conversation_id,
+                agent_type="contract_auditor",
+                status=precheck["workflow_status"],
+                waiting_for=precheck["awaiting"]["type"],
+                summary=(request.user_input or request.action)[:200],
+            )
+            _append_assistant_message(
+                memory_service,
+                conversation_id=request.conversation_id,
+                content=precheck["awaiting"]["message"],
+                metadata={
+                    "agent_type": "contract_auditor",
+                    "workflow_status": precheck["workflow_status"],
+                    "awaiting": precheck["awaiting"],
+                },
+                status="waiting",
+            )
             return success_response(data=precheck, message="Contract Auditor Agent 等待用户输入")
 
         agent_request = AgentRunRequest(
             agent_type="contract_auditor",
-            user_input=_build_contract_auditor_prompt(request),
+            user_input=prompt,
             conversation_id=request.conversation_id,
             user_context=_build_contract_auditor_context(request),
             messages=request.messages,
@@ -92,6 +173,26 @@ async def run_contract_auditor_agent(request: ContractAuditorAgentRequest):
             "awaiting": None,
             "agent_result": result.model_dump(),
         }
+        _upsert_conversation(
+            memory_service,
+            conversation_id=request.conversation_id,
+            agent_type="contract_auditor",
+            status=response_data["workflow_status"],
+            waiting_for=None,
+            summary=result.summary[:200] if result.summary else (request.user_input or request.action)[:200],
+        )
+        _append_assistant_message(
+            memory_service,
+            conversation_id=request.conversation_id,
+            content=result.answer,
+            metadata={
+                "agent_type": "contract_auditor",
+                "workflow_status": response_data["workflow_status"],
+                "risk_level": result.risk_level,
+                "risk_flags": result.risk_flags,
+                "needs_human_handoff": result.needs_human_handoff,
+            },
+        )
         return success_response(data=response_data, message="Contract Auditor Agent 调用成功")
     except ValueError as exc:
         return error_response(message=str(exc), code=400)
@@ -178,3 +279,59 @@ def _resolve_contract_workflow_status(request: ContractAuditorAgentRequest) -> s
     if request.action == "supplement_info":
         return "supplement_received"
     return "review_completed"
+
+
+def _upsert_conversation(
+    memory_service: AgentMemoryService,
+    *,
+    conversation_id: str,
+    agent_type: str,
+    status: str,
+    waiting_for: str | None,
+    summary: str | None,
+) -> None:
+    memory_service.create_or_update_conversation(
+        AgentConversationCreate(
+            conversation_id=conversation_id,
+            agent_type=agent_type,
+            status=status,
+            current_waiting_for=waiting_for,
+            summary=summary,
+        )
+    )
+
+
+def _append_user_message(
+    memory_service: AgentMemoryService,
+    *,
+    conversation_id: str,
+    content: str,
+    metadata: dict,
+) -> None:
+    memory_service.append_message(
+        AgentMessageCreate(
+            conversation_id=conversation_id,
+            role="user",
+            content=content,
+            metadata=metadata,
+        )
+    )
+
+
+def _append_assistant_message(
+    memory_service: AgentMemoryService,
+    *,
+    conversation_id: str,
+    content: str,
+    metadata: dict,
+    status: str = "completed",
+) -> None:
+    memory_service.append_message(
+        AgentMessageCreate(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=content,
+            status=status,
+            metadata=metadata,
+        )
+    )
