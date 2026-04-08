@@ -63,7 +63,7 @@ async def create_api_key(
     if not user:
         return error_response(message="用户名或密码错误", code=401)
     
-    auth_token = auth_service.create_api_auth_key(user.id, expires_hours=24)
+    auth_token = auth_service.create_api_auth_key(user.username, expires_hours=24)
     
     api_key_data = AuthKeyResponse(
         api_auth_key=auth_token.api_auth_key,

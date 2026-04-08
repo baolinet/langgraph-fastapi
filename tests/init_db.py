@@ -9,8 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database import SessionLocal, engine
-from models.user import User
-from models.auth import AuthToken
+from models import Base, User
 import hashlib
 
 def init_db():
@@ -18,8 +17,7 @@ def init_db():
     print("📝 创建数据库表...")
     
     # 创建所有表
-    User.metadata.create_all(bind=engine)
-    AuthToken.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
     print("✅ 数据库表创建成功")
     
     # 创建测试用户
@@ -84,9 +82,10 @@ def init_db():
     print("  - user1 / password123")
     print("  - user2 / password123")
     print("\n现在可以运行测试：")
-    print("  python test_auth.py")
-    print("  python test_response_format.py")
-    print("  python test_users.py")
+    print("  python tests/test_auth.py")
+    print("  python tests/test_response_format.py")
+    print("  python tests/test_users.py")
+    print("  python tests/test_agents.py")
 
 if __name__ == "__main__":
     init_db()

@@ -1,21 +1,32 @@
-# Schemas package
-from schemas.user import UserBase, UserCreate, UserUpdate, UserResponse
-from schemas.auth import LoginRequest, TokenResponse, AuthKeyResponse
-
-__all__ = [
-    "UserBase", "UserCreate", "UserUpdate", "UserResponse",
-    "LoginRequest", "TokenResponse", "AuthKeyResponse"
-]
+from schemas.memory import (
+    AgentConversationCreate,
+    AgentConversationResponse,
+    AgentMessageCreate,
+    AgentMessageResponse,
+)
+from schemas.auth import AuthKeyResponse, LoginRequest, TokenResponse
 from schemas.llm import (
     AgentLLMBindingCreate,
     AgentLLMBindingResponse,
     LLMConfigCreate,
     LLMConfigResponse,
 )
+from schemas.user import UserBase, UserCreate, UserResponse, UserUpdate
 
 __all__ = [
+    "UserBase",
+    "UserCreate",
+    "UserUpdate",
+    "UserResponse",
+    "LoginRequest",
+    "TokenResponse",
+    "AuthKeyResponse",
     "LLMConfigCreate",
     "LLMConfigResponse",
     "AgentLLMBindingCreate",
     "AgentLLMBindingResponse",
+    "AgentConversationCreate",
+    "AgentConversationResponse",
+    "AgentMessageCreate",
+    "AgentMessageResponse",
 ]

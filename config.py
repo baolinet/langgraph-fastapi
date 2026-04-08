@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     debug: bool = True
     
     # 数据库配置
-    database_url: str = "sqlite:///./test.db"
+    database_url: str = "sqlite:///./agents.db"
     
     # JWT 配置
     jwt_secret_key: str = "your-secret-key-change-in-production"

@@ -73,10 +73,10 @@ class AuthService:
         """为用户创建 JWT Token"""
         return self.create_jwt_token(user)
     
-    def create_api_auth_key(self, user_id: int, expires_hours: int = 24) -> AuthToken:
+    def create_api_auth_key(self, user_name: str, expires_hours: int = 24) -> AuthToken:
         """创建 API 认证 Key"""
         auth_token = AuthToken(
-            user_id=user_id,
+            user_name=user_name,
             api_auth_key=AuthToken.generate_key(),
             expires_at=AuthToken.create_expires_at(expires_hours)
         )
@@ -129,8 +129,8 @@ class AuthService:
         auth_token = self.validate_api_auth_key(api_key)
         if not auth_token:
             return None
-        # 通过 user_id 逻辑关联查询用户
-        return self.db.query(User).filter(User.id == auth_token.user_id).first()
+        # 通过 user_name 逻辑关联查询用户
+        return self.db.query(User).filter(User.username == auth_token.user_name).first()
     
     def get_user_by_jwt_token(self, token: str) -> Optional[User]:
         """通过 JWT Token 获取用户"""

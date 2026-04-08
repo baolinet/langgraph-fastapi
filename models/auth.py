@@ -1,15 +1,13 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
-from sqlalchemy.orm import declarative_base
 from datetime import datetime, timedelta, timezone
-
-Base = declarative_base()
+from models.user import Base
 
 class AuthToken(Base):
     """API 认证 Token 模型"""
-    __tablename__ = "auth_tokens"
+    __tablename__ = "auth_keys"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, nullable=False, index=True)  # 逻辑关联，不使用 ForeignKey
+    user_name = Column(String(50), nullable=False, index=True)  # 逻辑关联 users.username
     api_auth_key = Column(String(64), unique=True, index=True, nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
