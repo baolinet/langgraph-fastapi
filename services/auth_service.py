@@ -123,6 +123,20 @@ class AuthService:
         auth_token.is_active = False
         self.db.commit()
         return True
+
+    def revoke_api_auth_key_for_user(self, api_key: str, user_name: str) -> bool:
+        """撤销当前用户自己的 API Key"""
+        auth_token = self.db.query(AuthToken).filter(
+            AuthToken.api_auth_key == api_key,
+            AuthToken.user_name == user_name
+        ).first()
+
+        if not auth_token:
+            return False
+
+        auth_token.is_active = False
+        self.db.commit()
+        return True
     
     def get_user_by_api_key(self, api_key: str) -> Optional[User]:
         """通过 API Key 获取用户"""

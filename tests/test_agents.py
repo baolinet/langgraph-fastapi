@@ -40,8 +40,17 @@ def print_test_result(test_name: str, success: bool, details: str = ""):
 def get_api_key(username="admin", password="admin123") -> str | None:
     try:
         response = requests.post(
-            f"{BASE_URL}/api-key",
+            f"{BASE_URL}/login",
             json={"username": username, "password": password},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code != 200:
+            return None
+
+        jwt_token = response.json()["data"]["access_token"]
+        response = requests.post(
+            f"{BASE_URL}/api-key",
+            headers={"Authorization": f"Bearer {jwt_token}"},
             timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 200:

@@ -23,12 +23,26 @@ import uuid
 
 BASE_URL = "http://127.0.0.1:8000"
 
-def get_api_key(username="testuser", password="test123"):
-    """获取 API Key 用于测试"""
-    response = requests.post(f"{BASE_URL}/api-key", json={
+def get_jwt_token(username="testuser", password="test123"):
+    """获取 JWT Token 用于签发 API Key"""
+    response = requests.post(f"{BASE_URL}/login", json={
         "username": username,
         "password": password
     })
+    if response.status_code == 200:
+        return response.json()["data"]["access_token"]
+    return None
+
+def get_api_key(username="testuser", password="test123"):
+    """获取 API Key 用于测试"""
+    jwt_token = get_jwt_token(username, password)
+    if not jwt_token:
+        return None
+
+    response = requests.post(
+        f"{BASE_URL}/api-key",
+        headers={"Authorization": f"Bearer {jwt_token}"}
+    )
     if response.status_code == 200:
         return response.json()["data"]["api_auth_key"]
     return None
@@ -280,11 +294,16 @@ def test_revoke_api_key():
     """测试撤销 API Key"""
     print_section("测试 7: POST /api-key/revoke")
     
+    jwt_token = get_jwt_token("admin", "admin123")
+    if not jwt_token:
+        print_test_result("获取 JWT Token 失败", False)
+        return
+
     # 先创建一个 API Key（使用 admin 账号）
-    response = requests.post(f"{BASE_URL}/api-key", json={
-        "username": "admin",
-        "password": "admin123"
-    })
+    response = requests.post(
+        f"{BASE_URL}/api-key",
+        headers={"Authorization": f"Bearer {jwt_token}"}
+    )
     
     if response.status_code != 200:
         print_test_result("创建 API Key 失败", False, f"状态码：{response.status_code}")
@@ -294,7 +313,11 @@ def test_revoke_api_key():
     print(f"   创建临时 API Key: {api_key[:20]}...")
     
     # 测试撤销
-    response = requests.post(f"{BASE_URL}/api-key/revoke", params={"api_auth_key": api_key})
+    response = requests.post(
+        f"{BASE_URL}/api-key/revoke",
+        params={"api_auth_key": api_key},
+        headers={"Authorization": f"Bearer {jwt_token}"}
+    )
     print_test_result(
         "撤销 API Key",
         response.status_code == 200,
@@ -311,7 +334,11 @@ def test_revoke_api_key():
     )
     
     # 测试撤销不存在的 API Key
-    response = requests.post(f"{BASE_URL}/api-key/revoke", params={"api_auth_key": "invalid-key"})
+    response = requests.post(
+        f"{BASE_URL}/api-key/revoke",
+        params={"api_auth_key": "invalid-key"},
+        headers={"Authorization": f"Bearer {jwt_token}"}
+    )
     print_test_result(
         "撤销不存在的 API Key",
         response.status_code == 404,

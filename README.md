@@ -61,6 +61,7 @@ python tests/test_auth.py && python tests/test_response_format.py && python test
 ### API Key（后端服务调用）
 - **用途**: 后端服务、脚本、第三方系统
 - **接口**: `POST /api-key`
+- **前置条件**: 先通过 `POST /login` 获取 JWT Token
 - **有效期**: 24 小时
 - **使用方式**: `api-auth-key: <key>`
 
@@ -92,10 +93,14 @@ curl -X GET "http://127.0.0.1:8000/api/users/" \
 #### 2. API Key 认证
 
 ```bash
-# 创建 API Key
-curl -X POST "http://127.0.0.1:8000/api-key" \
+# 先登录获取 JWT Token
+JWT_TOKEN=$(curl -s -X POST "http://127.0.0.1:8000/login" \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"admin123"}' | jq -r '.data.access_token')
+
+# 使用 JWT 创建 API Key
+curl -X POST "http://127.0.0.1:8000/api-key" \
+  -H "Authorization: Bearer ${JWT_TOKEN}"
 
 # 响应示例
 {
@@ -113,8 +118,9 @@ curl -X GET "http://127.0.0.1:8000/api/users/" \
 
 ```bash
 curl -X POST "http://127.0.0.1:8000/api-key/revoke" \
-  -H "Content-Type: application/json" \
-  -d '{"api_auth_key":"abc123xyz..."}'
+  -H "Authorization: Bearer ${JWT_TOKEN}" \
+  -G \
+  --data-urlencode "api_auth_key=abc123xyz..."
 ```
 
 ---
@@ -126,8 +132,8 @@ curl -X POST "http://127.0.0.1:8000/api-key/revoke" \
 | 方法 | 端点 | 说明 | 认证方式 |
 |------|------|------|----------|
 | POST | `/login` | 用户登录获取 JWT Token | 无 |
-| POST | `/api-key` | 创建 API Key | 无 |
-| POST | `/api-key/revoke` | 撤销 API Key | 无 |
+| POST | `/api-key` | 创建 API Key | JWT |
+| POST | `/api-key/revoke` | 撤销 API Key | JWT |
 
 ### 用户管理接口
 
@@ -356,10 +362,13 @@ python tests/init_db.py
 # 重新初始化测试数据
 python tests/init_db.py
 
-# 或使用 admin 账号测试
-curl -X POST http://127.0.0.1:8000/api-key \
+# 或先登录再创建 API Key
+JWT_TOKEN=$(curl -s -X POST http://127.0.0.1:8000/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d '{"username":"admin","password":"admin123"}' | jq -r '.data.access_token')
+
+curl -X POST http://127.0.0.1:8000/api-key \
+  -H "Authorization: Bearer ${JWT_TOKEN}"
 ```
 
 ---

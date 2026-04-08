@@ -1,12 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 from services.auth_service import AuthService
-from services.user_service import UserService
 from schemas.auth import LoginRequest, TokenResponse, AuthKeyResponse
 from config import get_settings
-from typing import Optional
-from datetime import datetime
+from models.user import User
+from routers.dependencies import get_current_user_from_jwt
 from utils.response import success_response, error_response
 
 settings = get_settings()
@@ -49,21 +48,17 @@ async def login(
 
 @router.post("/api-key", summary="创建 API Key")
 async def create_api_key(
-    login_request: LoginRequest,
+    current_user: User = Depends(get_current_user_from_jwt),
     auth_service: AuthService = Depends(get_auth_service)
 ):
     """
     创建 API 认证 Key
-    
-    - **username**: 用户名
-    - **password**: 密码
+
+    - 需要先通过 /login 获取 JWT Token
+    - 在 Authorization Header 中传入：Bearer <jwt_token>
     - 返回的 api_auth_key 用于访问 /api/** 接口
     """
-    user = auth_service.authenticate_user(login_request)
-    if not user:
-        return error_response(message="用户名或密码错误", code=401)
-    
-    auth_token = auth_service.create_api_auth_key(user.username, expires_hours=24)
+    auth_token = auth_service.create_api_auth_key(current_user.username, expires_hours=24)
     
     api_key_data = AuthKeyResponse(
         api_auth_key=auth_token.api_auth_key,
@@ -76,14 +71,17 @@ async def create_api_key(
 @router.post("/api-key/revoke", summary="撤销 API Key")
 async def revoke_api_key(
     api_auth_key: str,
+    current_user: User = Depends(get_current_user_from_jwt),
     auth_service: AuthService = Depends(get_auth_service)
 ):
     """
     撤销 API Key
-    
+
+    - 需要先通过 /login 获取 JWT Token
+    - 仅允许撤销当前登录用户自己的 API Key
     - **api_auth_key**: 要撤销的 API Key
     """
-    success = auth_service.revoke_api_auth_key(api_auth_key)
+    success = auth_service.revoke_api_auth_key_for_user(api_auth_key, current_user.username)
     if not success:
-        return error_response(message="API Key 不存在", code=404)
+        return error_response(message="API Key 不存在或无权撤销", code=404)
     return success_response(message="API Key 已撤销")

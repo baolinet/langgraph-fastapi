@@ -49,11 +49,17 @@ def test_api_key():
     print("🖥️  测试场景 2：后端服务使用 API Key")
     print("=" * 60)
     
-    # 1. 获取 API Key
+    # 1. 先登录获取 JWT Token
+    jwt_token = test_jwt_login()
+    if not jwt_token:
+        print("❌ 获取 JWT Token 失败，无法继续创建 API Key")
+        return None
+
+    # 2. 使用 JWT Token 获取 API Key
     print("\n1️⃣  获取 API Key...")
     response = requests.post(
         f"{BASE_URL}/api-key",
-        json={"username": "admin", "password": "admin123"}
+        headers={"Authorization": f"Bearer {jwt_token}"}
     )
     
     if response.status_code == 200:
@@ -65,7 +71,7 @@ def test_api_key():
         print(f"   - 创建时间：{data['created_at']}")
         print(f"   - 过期时间：{data['expires_at']}")
         
-        # 2. 使用 API Key 访问受保护接口
+        # 3. 使用 API Key 访问受保护接口
         print("\n2️⃣  使用 API Key 访问 /api/users/ 接口...")
         headers = {"api-auth-key": api_key}
         response = requests.get(f"{BASE_URL}/api/users/", headers=headers)
@@ -122,6 +128,7 @@ def main():
     print("   - 有效期：1 小时")
     print("\n✅ API Key 认证：用于后端服务调用")
     print("   - 获取接口：POST /api-key")
+    print("   - 需要请求头：Authorization: Bearer <jwt_token>")
     print("   - 返回长期有效的 API Key")
     print("   - 有效期：24 小时")
     print("   - 访问 /api/** 接口需要：api-auth-key 请求头")

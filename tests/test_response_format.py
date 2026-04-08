@@ -98,10 +98,18 @@ def test_error_response(jwt_token):
 
 def generate_api_key():
     """生成 API Key 用于测试"""
-    response = requests.post(f"{BASE_URL}/api-key", json={
+    response = requests.post(f"{BASE_URL}/login", json={
         "username": "admin",
         "password": "admin123"
     })
+    if response.status_code != 200 or "data" not in response.json():
+        return None
+
+    jwt_token = response.json()["data"]["access_token"]
+    response = requests.post(
+        f"{BASE_URL}/api-key",
+        headers={"Authorization": f"Bearer {jwt_token}"}
+    )
     if response.status_code == 200:
         data = response.json()
         if "data" in data and "api_auth_key" in data["data"]:
