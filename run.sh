@@ -9,6 +9,9 @@ echo "============================================================"
 HOST="127.0.0.1"
 PORT="8000"
 RELOAD="--reload"
+DB_FILE="agents.db"
+PYTHON_BIN=""
+USE_UV="false"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -20,10 +23,16 @@ NC='\033[0m' # No Color
 echo ""
 echo "📦 检查 Python 环境..."
 if command -v uv &> /dev/null; then
-    PYTHON_CMD="uv run"
+    USE_UV="true"
     echo "✅ 使用 uv 运行环境"
+elif command -v python3.12 &> /dev/null; then
+    PYTHON_BIN="python3.12"
+    echo "✅ 使用 Python 3.12 运行环境"
+elif command -v python3 &> /dev/null; then
+    PYTHON_BIN="python3"
+    echo "✅ 使用 Python 运行环境"
 elif command -v python &> /dev/null; then
-    PYTHON_CMD="python"
+    PYTHON_BIN="python"
     echo "✅ 使用 Python 运行环境"
 else
     echo -e "${RED}❌ 未找到 Python 或 uv${NC}"
@@ -55,9 +64,13 @@ fi
 # 检查数据库文件
 echo ""
 echo "🗄️  检查数据库..."
-if [ ! -f "test.db" ]; then
+if [ ! -f "${DB_FILE}" ]; then
     echo "⚠️  数据库文件不存在，正在初始化..."
-    $PYTHON_CMD tests/init_db.py
+    if [ "${USE_UV}" = "true" ]; then
+        uv run tests/init_db.py
+    else
+        "${PYTHON_BIN}" tests/init_db.py
+    fi
     if [ $? -ne 0 ]; then
         echo -e "${RED}❌ 数据库初始化失败${NC}"
         exit 1
@@ -78,4 +91,8 @@ echo "============================================================"
 echo ""
 
 # 使用 exec 替换当前进程，这样可以正确接收 Ctrl+C 信号
-exec $PYTHON_CMD uvicorn main:app --host ${HOST} --port ${PORT} ${RELOAD}
+if [ "${USE_UV}" = "true" ]; then
+    exec uv run uvicorn main:app --host "${HOST}" --port "${PORT}" ${RELOAD}
+else
+    exec "${PYTHON_BIN}" -m uvicorn main:app --host "${HOST}" --port "${PORT}" ${RELOAD}
+fi

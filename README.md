@@ -29,8 +29,15 @@ chmod +x run_tests.sh
 ### 方式二：手动操作
 
 ```bash
+# 0. 创建独立虚拟环境（推荐，避免和现有 Conda/全局包冲突）
+python -m venv .venv
+source .venv/bin/activate
+
 # 1. 安装依赖
 python -m pip install -r requirements.txt
+
+# 如果你使用的是 Python 3.13，需要确保 SQLAlchemy 至少为 2.0.31
+# 旧版本 2.0.23 会在 Python 3.13 下初始化数据库时报错
 
 # 2. 初始化数据库
 python tests/init_db.py
