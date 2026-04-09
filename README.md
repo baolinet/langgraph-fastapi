@@ -30,7 +30,7 @@ chmod +x run_tests.sh
 
 ```bash
 # 1. 安装依赖
-uv sync
+python -m pip install -r requirements.txt
 
 # 2. 初始化数据库
 python tests/init_db.py
