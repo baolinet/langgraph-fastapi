@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from database import get_db
 from services.user_service import UserService
-from schemas.user import UserCreate, UserUpdate, UserResponse
+from schemas.user import UserCreate, UserUpdate, UserResponse, UserChangePassword
 from routers.dependencies import get_current_user_from_api_key, verify_api_auth_key
 from models.user import User
 from typing import List, Optional
@@ -49,6 +49,20 @@ async def get_users(
         }
         for user in users
     ], message="获取用户列表成功")
+
+
+@router.post("/change-password", summary="修改当前用户密码")
+async def change_password(
+    password_change: UserChangePassword,
+    current_user: User = Depends(get_current_user_from_api_key),
+    user_service: UserService = Depends(get_user_service)
+):
+    """使用 api-auth-key 修改当前登录用户密码"""
+    try:
+        user_service.change_password(current_user, password_change)
+        return success_response(message="密码修改成功")
+    except ValueError as e:
+        return error_response(message=str(e), code=400)
 
 @router.get("/{username}", summary="获取用户详情", dependencies=[Depends(verify_api_auth_key)])
 async def get_user(

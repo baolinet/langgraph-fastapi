@@ -258,9 +258,70 @@ def test_activate_deactivate_user(api_key, username):
         f"状态码：{response.status_code}, message: {response.json().get('message')}"
     )
 
+def test_change_password(api_key, username, old_password):
+    """测试修改当前用户密码"""
+    print_section("测试 6: POST /api/users/change-password")
+
+    headers = {"api-auth-key": api_key}
+    new_password = f"{old_password}_new"
+
+    response = requests.post(
+        f"{BASE_URL}/api/users/change-password",
+        json={
+            "old_password": "wrongpass",
+            "new_password": new_password
+        },
+        headers=headers
+    )
+    print_test_result(
+        "旧密码错误时修改密码失败",
+        response.status_code == 400,
+        f"状态码：{response.status_code}, message: {response.json().get('message')}"
+    )
+
+    response = requests.post(
+        f"{BASE_URL}/api/users/change-password",
+        json={
+            "old_password": old_password,
+            "new_password": new_password
+        },
+        headers=headers
+    )
+    print_test_result(
+        "修改密码成功",
+        response.status_code == 200,
+        f"状态码：{response.status_code}, message: {response.json().get('message')}"
+    )
+
+    new_jwt_token = get_jwt_token(username, new_password)
+    print_test_result(
+        "使用新密码登录成功",
+        new_jwt_token is not None,
+        "新密码可用于登录" if new_jwt_token else "新密码登录失败"
+    )
+
+    restore_api_key = get_api_key(username, new_password)
+    if restore_api_key:
+        restore_headers = {"api-auth-key": restore_api_key}
+        restore_response = requests.post(
+            f"{BASE_URL}/api/users/change-password",
+            json={
+                "old_password": new_password,
+                "new_password": old_password
+            },
+            headers=restore_headers
+        )
+        print_test_result(
+            "恢复原密码成功",
+            restore_response.status_code == 200,
+            f"状态码：{restore_response.status_code}, message: {restore_response.json().get('message')}"
+        )
+    else:
+        print_test_result("恢复原密码前获取 API Key", False, "无法使用新密码获取 API Key")
+
 def test_delete_user(api_key, username):
     """测试删除用户"""
-    print_section("测试 6: DELETE /api/users/{username}")
+    print_section("测试 7: DELETE /api/users/{username}")
     
     headers = {"api-auth-key": api_key}
     
@@ -292,7 +353,7 @@ def test_delete_user(api_key, username):
 
 def test_revoke_api_key():
     """测试撤销 API Key"""
-    print_section("测试 7: POST /api-key/revoke")
+    print_section("测试 8: POST /api-key/revoke")
     
     jwt_token = get_jwt_token("admin", "admin123")
     if not jwt_token:
@@ -347,7 +408,7 @@ def test_revoke_api_key():
 
 def test_validation_errors(api_key):
     """测试验证错误"""
-    print_section("测试 8: 验证错误测试")
+    print_section("测试 9: 验证错误测试")
     
     headers = {"api-auth-key": api_key}
     
@@ -404,7 +465,9 @@ def main():
         test_delete_user(api_key, test_username)
     else:
         print("\n⚠️  跳过需要测试用户的测试用例")
-    
+
+    test_change_password(api_key, username, password)
+
     test_revoke_api_key()
     test_validation_errors(api_key)
     
@@ -417,11 +480,12 @@ def main():
     print("   2. GET /api/users/search/fullname/{fullname} - 全名模糊查询")
     print("   3. POST /api/users/ - 创建用户")
     print("   4. PUT /api/users/{username} - 更新用户")
-    print("   5. DELETE /api/users/{username} - 删除用户")
-    print("   6. POST /api/users/{username}/activate - 激活用户")
-    print("   7. POST /api/users/{username}/deactivate - 禁用用户")
-    print("   8. POST /api-key/revoke - 撤销 API Key")
-    print("   9. 验证错误处理（422）")
+    print("   5. POST /api/users/{username}/activate - 激活用户")
+    print("   6. POST /api/users/{username}/deactivate - 禁用用户")
+    print("   7. POST /api/users/change-password - 修改当前用户密码")
+    print("   8. DELETE /api/users/{username} - 删除用户")
+    print("   9. POST /api-key/revoke - 撤销 API Key")
+    print("   10. 验证错误处理（422）")
     print("\n🎯 测试覆盖率：用户管理接口 100% 覆盖")
     print()
 

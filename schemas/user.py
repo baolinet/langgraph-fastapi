@@ -18,6 +18,12 @@ class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     password: Optional[str] = Field(None, min_length=6)
 
+
+class UserChangePassword(BaseModel):
+    """用户修改密码请求"""
+    old_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=6)
+
 class UserResponse(UserBase):
     """用户响应 DTO"""
     id: int

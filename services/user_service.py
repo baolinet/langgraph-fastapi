@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from models.user import User
-from schemas.user import UserCreate, UserUpdate
+from schemas.user import UserCreate, UserUpdate, UserChangePassword
 from typing import Optional, List
 import hashlib
 
@@ -134,7 +134,22 @@ class UserService:
         self.db.commit()
         self.db.refresh(user)
         return user
-    
+
+    def change_password(self, user: User, password_change: UserChangePassword) -> User:
+        """修改当前用户密码"""
+        old_password_hash = self._hash_password(password_change.old_password)
+        if user.password_hash != old_password_hash:
+            raise ValueError("旧密码错误")
+
+        new_password_hash = self._hash_password(password_change.new_password)
+        if user.password_hash == new_password_hash:
+            raise ValueError("新密码不能与旧密码相同")
+
+        user.password_hash = new_password_hash
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
     def delete_user_by_username(self, username: str) -> bool:
         """根据用户名删除用户"""
         user = self.get_user_by_username(username)

@@ -11,12 +11,13 @@ from schemas.llm import (
     LLMConfigCreate,
     LLMConfigResponse,
 )
-from schemas.user import UserBase, UserCreate, UserResponse, UserUpdate
+from schemas.user import UserBase, UserChangePassword, UserCreate, UserResponse, UserUpdate
 
 __all__ = [
     "UserBase",
     "UserCreate",
     "UserUpdate",
+    "UserChangePassword",
     "UserResponse",
     "LoginRequest",
     "TokenResponse",
