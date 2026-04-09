@@ -49,25 +49,33 @@ def get_llm_config(profile: AgentProfile) -> dict[str, Any]:
 
 def create_chat_model(profile: AgentProfile):
     config = get_llm_config(profile)
-    try:
-        from langchain_openai import ChatOpenAI
-    except ImportError as exc:
-        raise RuntimeError(
-            "langchain-openai is not installed. Install it before enabling live LLM calls."
-        ) from exc
+    provider = str(config.get("provider") or "openai_compatible").strip().lower()
 
-    kwargs = {
-        "model": config["model"],
-        "temperature": config["temperature"],
-        "timeout": config["timeout"],
-    }
-    if config.get("base_url"):
-        kwargs["base_url"] = config["base_url"]
-    if config.get("api_key"):
-        kwargs["api_key"] = config["api_key"]
-    if config.get("max_tokens") is not None:
-        kwargs["max_tokens"] = config["max_tokens"]
-    return ChatOpenAI(**kwargs)
+    if provider in {"openai", "openai_compatible"}:
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "langchain-openai is not installed. Install it before enabling live LLM calls."
+            ) from exc
+
+        kwargs = {
+            "model": config["model"],
+            "temperature": config["temperature"],
+            "timeout": config["timeout"],
+        }
+        if config.get("base_url"):
+            kwargs["base_url"] = config["base_url"]
+        if config.get("api_key"):
+            kwargs["api_key"] = config["api_key"]
+        if config.get("max_tokens") is not None:
+            kwargs["max_tokens"] = config["max_tokens"]
+        return ChatOpenAI(**kwargs)
+
+    raise ValueError(
+        f"Unsupported provider '{provider}' for agent '{profile.agent_type}'. "
+        "Currently supported providers: openai, openai_compatible."
+    )
 
 
 def _get_db_llm_config(agent_type: str, llm_profile: str) -> dict[str, Any] | None:

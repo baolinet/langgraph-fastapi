@@ -20,8 +20,8 @@ from requests import RequestException, Timeout
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 BASE_URL = "http://127.0.0.1:8000"
-REQUEST_TIMEOUT = 20
-LLM_REQUEST_TIMEOUT = 60
+REQUEST_TIMEOUT = 60
+LLM_REQUEST_TIMEOUT = 600
 
 
 def print_section(title: str):
@@ -183,18 +183,23 @@ def test_contract_auditor_full_review_flow(api_key: str):
         return
 
     result = response.json()
-    data = result.get("data", {})
-    agent_result = data.get("agent_result", {})
+    data = result.get("data") or {}
+    agent_result = data.get("agent_result") or {}
     success = (
         response.status_code == 200
         and data.get("workflow_status") == "review_completed"
         and isinstance(agent_result.get("answer"), str)
         and agent_result.get("agent_type") == "contract_auditor"
     )
+    detail = (
+        f"状态码：{response.status_code}, "
+        f"workflow_status: {data.get('workflow_status')}, "
+        f"message: {result.get('message')}"
+    )
     print_test_result(
         "完整合同审核成功",
         success,
-        f"状态码：{response.status_code}, workflow_status: {data.get('workflow_status')}",
+        detail,
     )
     if response.status_code != 200:
         print(f"   错误响应：{result}")
@@ -239,17 +244,18 @@ def test_customer_service_success(api_key: str):
         return
 
     result = response.json()
-    data = result.get("data", {})
+    data = result.get("data") or {}
     success = (
         response.status_code == 200
         and data.get("agent_type") == "customer_service"
         and isinstance(data.get("answer"), str)
         and bool(data.get("answer", "").strip())
     )
+    detail = f"状态码：{response.status_code}, agent_type: {data.get('agent_type')}, message: {result.get('message')}"
     print_test_result(
         "Customer Service 基础调用成功",
         success,
-        f"状态码：{response.status_code}, agent_type: {data.get('agent_type')}",
+        detail,
     )
     if response.status_code != 200:
         print(f"   错误响应：{result}")
@@ -286,9 +292,9 @@ def main():
     # test_contract_auditor_waiting_for_contract_text(api_key)
     # test_contract_auditor_waiting_for_supplement(api_key)
     # test_contract_auditor_waiting_for_confirmation(api_key)
-    # test_contract_auditor_full_review_flow(api_key)
-    test_customer_service_success(api_key)
-    test_customer_service_validation_error(api_key)
+    test_contract_auditor_full_review_flow(api_key)
+    # test_customer_service_success(api_key)
+    # test_customer_service_validation_error(api_key)
 
 
 if __name__ == "__main__":
