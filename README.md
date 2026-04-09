@@ -55,6 +55,12 @@ python tests/test_auth.py && python tests/test_response_format.py && python test
 - **ReDoc**: http://127.0.0.1:8000/redoc
 - **健康检查**: http://127.0.0.1:8000/health
 
+### 文档静态资源
+
+项目已将 Swagger UI 和 ReDoc 的前端资源内置到仓库，通过应用自身的 `/static` 路径提供，不依赖 `jsdelivr`、`unpkg` 等外部 CDN。
+
+Nginx 反向代理时只需要将应用本身转发出去即可；如果后续改为子路径代理，例如 `/backend/`，还需要同时配置应用的 `root_path` 或在代理层补齐前缀，否则 `/docs` 中的 `/openapi.json` 和 `/static/...` 会指向错误路径。
+
 ---
 
 ## 🔐 双认证机制

@@ -1,5 +1,9 @@
+from pathlib import Path
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.staticfiles import StaticFiles
 from config import get_settings
 from routers import agents, auth, users
 from database import engine
@@ -9,11 +13,14 @@ from utils.response import success_response
 
 # 创建应用
 settings = get_settings()
+static_dir = Path(__file__).parent / "static"
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     debug=settings.debug,
-    description="FastAPI 实用三层架构示例 - 带认证功能"
+    description="FastAPI 实用三层架构示例 - 带认证功能",
+    docs_url=None,
+    redoc_url=None,
 )
 
 # 注册异常处理器
@@ -31,10 +38,34 @@ app.add_middleware(
 # 创建数据库表
 Base.metadata.create_all(bind=engine)
 
+# 挂载本地静态资源，避免文档依赖外部 CDN
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 # 注册路由
 app.include_router(auth.router)  # 认证路由
 app.include_router(users.router)  # 用户路由
 app.include_router(agents.router)  # Agent 路由
+
+
+@app.get("/docs", include_in_schema=False)
+async def swagger_ui_html():
+    """通过本地静态资源提供 Swagger UI。"""
+    return get_swagger_ui_html(
+        openapi_url=app.openapi_url,
+        title=f"{settings.app_name} - Swagger UI",
+        swagger_js_url="/static/swagger/swagger-ui-bundle.js",
+        swagger_css_url="/static/swagger/swagger-ui.css",
+    )
+
+
+@app.get("/redoc", include_in_schema=False)
+async def redoc_html():
+    """通过本地静态资源提供 ReDoc。"""
+    return get_redoc_html(
+        openapi_url=app.openapi_url,
+        title=f"{settings.app_name} - ReDoc",
+        redoc_js_url="/static/redoc/redoc.standalone.js",
+    )
 
 @app.get("/", tags=["系统"])
 async def root():
@@ -43,7 +74,8 @@ async def root():
         data={
             "message": "欢迎使用 FastAPI 实用项目",
             "version": settings.app_version,
-            "docs": "/docs"
+            "docs": "/docs",
+            "redoc": "/redoc",
         },
         message="欢迎"
     )
