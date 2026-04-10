@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from agents import build_agent_runner
 from agents.core.runner import AgentRunRequest
+from agents.graphs.mermaid import build_agent_mermaid, resolve_agent_steps
 from database import get_db
 from routers.dependencies import verify_api_auth_key
 from schemas.memory import AgentConversationCreate, AgentMessageCreate
@@ -42,6 +43,52 @@ class ContractAuditorAgentRequest(BaseModel):
     user_context: dict = Field(default_factory=dict, description="用户上下文")
     messages: list[dict[str, str]] = Field(default_factory=list, description="历史消息")
     metadata: dict = Field(default_factory=dict, description="附加元数据")
+
+
+@router.get(
+    "/graph/mermaid",
+    summary="查看 Agent Mermaid 图",
+    dependencies=[Depends(verify_api_auth_key)],
+)
+async def get_agent_graph_mermaid(agent_type: str | None = None):
+    """按 agent_type 查看 Mermaid 图；不传时返回全部 agent 图。"""
+    available_types = _agent_runner.list_agent_types()
+
+    if agent_type:
+        try:
+            profile = _agent_runner.registry.get(agent_type)
+        except ValueError as exc:
+            return error_response(message=str(exc), code=400)
+
+        return success_response(
+            data={
+                "agent_type": agent_type,
+                "display_name": profile.display_name,
+                "steps": resolve_agent_steps(profile),
+                "mermaid": build_agent_mermaid(profile),
+            },
+            message="Agent Mermaid 图获取成功",
+        )
+
+    graphs = []
+    for current_agent_type in available_types:
+        profile = _agent_runner.registry.get(current_agent_type)
+        graphs.append(
+            {
+                "agent_type": current_agent_type,
+                "display_name": profile.display_name,
+                "steps": resolve_agent_steps(profile),
+                "mermaid": build_agent_mermaid(profile),
+            }
+        )
+
+    return success_response(
+        data={
+            "agent_types": available_types,
+            "graphs": graphs,
+        },
+        message="全部 Agent Mermaid 图获取成功",
+    )
 
 
 @router.post(
